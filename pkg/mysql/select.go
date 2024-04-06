@@ -31,27 +31,7 @@ func scanSelectStatementForIssues(query string, tables []MysqlTable) ([]issuetyp
 		return nil, nil
 	}
 
-	// build our index map
-	indexesByTable := make(map[string][]Index)
-	for _, table := range tables {
-		// primary keys
-		indexesByTable[table.TableName] = append(indexesByTable[table.TableName], Index{
-			Columns:      table.PrimaryKeys,
-			IsPrimaryKey: true,
-			IsUnique:     true, // of course
-		})
-
-		// other indexes
-		// for _, index := range table.Indexes {
-		// 	indexesByTable[table.TableName] = append(indexesByTable[table.TableName], Index{
-		// 		Columns:      index.Columns,
-		// 		IsPrimaryKey: false,
-		// 		IsUnique:     index.IsUnique,
-		// 	})
-		// }
-	}
-
-	issues, err := scanSelectStatementForMissingIndexes(query, selectStatement, tables, indexesByTable)
+	issues, err := scanSelectStatementForMissingIndexes(query, selectStatement, tables, indexesByTable(tables))
 	if err != nil {
 		return nil, err
 	}
