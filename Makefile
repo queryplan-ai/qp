@@ -61,6 +61,11 @@ deps:
 build:
 	go build -a -tags netgo $(BUILD_GO_FLAGS) $(LDFLAGS) -o bin/qp ./cmd/qp
 
+.PHONY: release
+release:
+	go build -a -tags netgo $(BUILD_GO_FLAGS) $(LDFLAGS_RELEASE) -o bin/qp ./cmd/qp
+
+
 .PHONY: fmt
 fmt:
 	go fmt ./pkg/... ./cmd/...

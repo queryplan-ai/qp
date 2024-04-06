@@ -15,6 +15,7 @@ func scanDeleteStatementForIssues(query string, mysqlTables []MysqlTable) ([]iss
 
 	return nil, nil
 }
+
 func parseDeleteStatement(query string) (*DeleteStatement, error) {
 	stmt, err := sqlparser.Parse(query)
 	if err != nil {

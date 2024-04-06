@@ -25,6 +25,13 @@ func RunShell(opts types.ShellOpts) error {
 		HistoryMaxSize:  maxCommandHistory,
 	}
 
+	if opts.ConnectionURI != "" {
+		result := handleConnect(&sh, opts.ConnectionURI)
+		if !result.IsSuccess {
+			return fmt.Errorf("error connecting to database: %s", result.Message)
+		}
+	}
+
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          prompt(&sh),
 		HistoryFile:     historyFile,

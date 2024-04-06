@@ -14,13 +14,19 @@ type QueryIssue struct {
 	ResolvedAt    *time.Time
 }
 
-const IssueSeverityLow = "low"
-const IssueSeverityMedium = "medium"
-const IssueSeverityHigh = "high"
+const (
+	IssueSeverityLow    = "low"
+	IssueSeverityMedium = "medium"
+	IssueSeverityHigh   = "high"
+)
 
-const TableIssueMissingPrimaryKey = "missing_primary_key"
+const (
+	TableIssueMissingPrimaryKey = "missing_primary_key"
+)
 
-const QueryIssueTypeWhereClauseMissingIndex = "where_clause_missing_index"
-const QueryIssueTypeJoinClauseMissingIndex = "join_clause_missing_index"
-const QueryIssueTypeColumnUpdatedInIndex = "column_updated_in_index"
-const QueryIssueTypeClauseMissingIndex = "clause_missing_index"
+const (
+	QueryIssueTypeWhereClauseMissingIndex = "where_clause_missing_index"
+	QueryIssueTypeJoinClauseMissingIndex  = "join_clause_missing_index"
+	QueryIssueTypeColumnUpdatedInIndex    = "column_updated_in_index"
+	QueryIssueTypeClauseMissingIndex      = "clause_missing_index"
+)

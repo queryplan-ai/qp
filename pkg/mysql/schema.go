@@ -135,3 +135,25 @@ WHERE c.TABLE_SCHEMA = ?`, db.DatabaseName)
 
 	return tables, nil
 }
+
+func indexesByTable(mysqlTables []MysqlTable) map[string][]Index {
+	indexesByTable := make(map[string][]Index)
+	for _, mysqlTable := range mysqlTables {
+		// primary keys
+		indexesByTable[mysqlTable.TableName] = append(indexesByTable[mysqlTable.TableName], Index{
+			Columns:      mysqlTable.PrimaryKeys,
+			IsPrimaryKey: true,
+			IsUnique:     true, // of course
+		})
+
+		// other indexes
+		// for _, index := range table.Indexes {
+		// 	indexesByTable[table.TableName] = append(indexesByTable[table.TableName], Index{
+		// 		Columns:      index.Columns,
+		// 		IsPrimaryKey: false,
+		// 		IsUnique:     index.IsUnique,
+		// 	})
+	}
+
+	return indexesByTable
+}

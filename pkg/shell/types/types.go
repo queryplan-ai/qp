@@ -6,6 +6,7 @@ import (
 
 type ShellOpts struct {
 	ConnectionURI string
+	OpenAIAPIKey  string
 }
 
 type Shell struct {

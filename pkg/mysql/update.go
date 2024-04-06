@@ -23,34 +23,15 @@ func scanUpdateStatementForIssues(query string, mysqlTables []MysqlTable) ([]iss
 		return nil, nil
 	}
 
-	// build our index map
-	indexesByTable := make(map[string][]Index)
-	for _, mysqlTable := range mysqlTables {
-		// primary keys
-		indexesByTable[mysqlTable.TableName] = append(indexesByTable[mysqlTable.TableName], Index{
-			Columns:      mysqlTable.PrimaryKeys,
-			IsPrimaryKey: true,
-			IsUnique:     true, // of course
-		})
-
-		// other indexes
-		// for _, index := range table.Indexes {
-		// 	indexesByTable[table.TableName] = append(indexesByTable[table.TableName], Index{
-		// 		Columns:      index.Columns,
-		// 		IsPrimaryKey: false,
-		// 		IsUnique:     index.IsUnique,
-		// 	})
-	}
-
 	queryIssues := []issuetypes.QueryIssue{}
 
-	issues, err := scanUpdateStatementForMissingIndexes(updateStatement, indexesByTable)
+	issues, err := scanUpdateStatementForMissingIndexes(updateStatement, indexesByTable(mysqlTables))
 	if err != nil {
 		return nil, err
 	}
 	queryIssues = append(queryIssues, issues...)
 
-	issues, err = scanUpdateStatementForIndexUpdates(query, mysqlTables, updateStatement, indexesByTable)
+	issues, err = scanUpdateStatementForIndexUpdates(query, mysqlTables, updateStatement, indexesByTable(mysqlTables))
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +40,7 @@ func scanUpdateStatementForIssues(query string, mysqlTables []MysqlTable) ([]iss
 	return queryIssues, nil
 }
 
-func scanUpdateStatementForIndexUpdates(cleanedStatement string, mysqlTables []MysqlTable, updateStatement *UpdateStatement, indexesByTable map[string][]Index) ([]issuetypes.QueryIssue, error) {
+func scanUpdateStatementForIndexUpdates(query string, mysqlTables []MysqlTable, updateStatement *UpdateStatement, indexesByTable map[string][]Index) ([]issuetypes.QueryIssue, error) {
 	queryIssues := []issuetypes.QueryIssue{}
 
 	// check if the column that's updated is part of an index
