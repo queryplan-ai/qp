@@ -6,6 +6,7 @@ import (
 
 	"github.com/queryplan-ai/qp/pkg/db/types"
 	"github.com/queryplan-ai/qp/pkg/mysql"
+	"github.com/queryplan-ai/qp/pkg/pg"
 	"github.com/xo/dburl"
 )
 
@@ -23,7 +24,7 @@ func LoadSchema(db *types.DB) {
 	case "mysql":
 		mysql.LoadSchema(db)
 	case "postgres":
-		loadPostgresSchema(db)
+		pg.LoadSchema(db)
 	}
 }
 

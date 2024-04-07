@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/queryplan-ai/qp/pkg/db/types"
 )
 
 func VerifyPGConnection(uri string) (string, error) {
@@ -30,8 +29,4 @@ func VerifyPGConnection(uri string) (string, error) {
 	}
 
 	return dbName, nil
-}
-
-func loadPostgresSchema(db *types.DB) {
-
 }
