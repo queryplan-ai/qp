@@ -163,3 +163,25 @@ order by c.ordinal_position`
 	}
 	return primaryKeys, nil
 }
+
+func indexesByTable(postgresTables []PostgresTable) map[string][]Index {
+	indexesByTable := make(map[string][]Index)
+	for _, postgresTable := range postgresTables {
+		// primary keys
+		indexesByTable[postgresTable.TableName] = append(indexesByTable[postgresTable.TableName], Index{
+			Columns:      postgresTable.PrimaryKeys,
+			IsPrimaryKey: true,
+			IsUnique:     true, // of course
+		})
+
+		// other indexes
+		// for _, index := range table.Indexes {
+		// 	indexesByTable[table.TableName] = append(indexesByTable[table.TableName], Index{
+		// 		Columns:      index.Columns,
+		// 		IsPrimaryKey: false,
+		// 		IsUnique:     index.IsUnique,
+		// 	})
+	}
+
+	return indexesByTable
+}
