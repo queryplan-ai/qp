@@ -25,8 +25,6 @@ func LoadSchema(db *dbtypes.DB) error {
 	db.SchemaLoaded = true
 	db.Tables = tables
 
-	fmt.Printf("Loaded tables : %v\n", tables)
-
 	return nil
 }
 
@@ -60,13 +58,20 @@ func listTables(db *dbtypes.DB) ([]dbtypes.Table, error) {
 
 	// load columns for each table
 	for i, table := range tables {
+		postgresTable := tables[i].(PostgresTable)
+
 		columns, err := listColumns(db, table.GetName())
 		if err != nil {
 			return nil, err
 		}
-
-		postgresTable := tables[i].(PostgresTable)
 		postgresTable.Columns = columns
+
+		primaryKeys, err := listPrimaryKeys(db, table.GetName())
+		if err != nil {
+			return nil, err
+		}
+		postgresTable.PrimaryKeys = primaryKeys
+
 		tables[i] = postgresTable
 	}
 
@@ -124,4 +129,37 @@ func stripOIDClass(value string) string {
 		return matches[1]
 	}
 	return value
+}
+
+func listPrimaryKeys(db *dbtypes.DB, tableName string) ([]string, error) {
+	conn, err := connect(db.ConnectionURI)
+	if err != nil {
+		return nil, err
+	}
+
+	query := `select tc.constraint_name, c.column_name
+from information_schema.table_constraints tc
+join information_schema.constraint_column_usage as ccu using (constraint_schema, constraint_name)
+join information_schema.columns as c on c.table_schema = tc.constraint_schema
+  and tc.table_name = c.table_name and ccu.column_name = c.column_name
+where constraint_type = 'PRIMARY KEY' and tc.table_name = $1
+order by c.ordinal_position`
+
+	rows, err := conn.Query(context.Background(), query, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("query primary keys: %w", err)
+	}
+	defer rows.Close()
+
+	primaryKeys := []string{}
+	for rows.Next() {
+		var constraintName, columnName string
+
+		if err := rows.Scan(&constraintName, &columnName); err != nil {
+			return nil, err
+		}
+
+		primaryKeys = append(primaryKeys, columnName)
+	}
+	return primaryKeys, nil
 }
