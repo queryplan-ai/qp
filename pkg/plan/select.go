@@ -1,10 +1,11 @@
-package pg
+package plan
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/blastrain/vitess-sqlparser/sqlparser"
+	dbtypes "github.com/queryplan-ai/qp/pkg/db/types"
 	issuetypes "github.com/queryplan-ai/qp/pkg/issue/types"
 )
 
@@ -21,7 +22,7 @@ type Index struct {
 	IsUnique     bool
 }
 
-func scanSelectStatementForIssues(query string, tables []PostgresTable) ([]issuetypes.QueryIssue, error) {
+func ScanSelectStatementForIssues(query string, tables []dbtypes.Table) ([]issuetypes.QueryIssue, error) {
 	selectStatement, err := parseSelectStatement(query, tables)
 	if err != nil {
 		return nil, err
@@ -31,7 +32,7 @@ func scanSelectStatementForIssues(query string, tables []PostgresTable) ([]issue
 		return nil, nil
 	}
 
-	issues, err := scanSelectStatementForMissingIndexes(query, selectStatement, tables, indexesByTable(tables))
+	issues, err := scanSelectStatementForMissingIndexes(selectStatement, indexesByTable(tables))
 	if err != nil {
 		return nil, err
 	}
@@ -39,9 +40,7 @@ func scanSelectStatementForIssues(query string, tables []PostgresTable) ([]issue
 	return issues, nil
 }
 
-// parseSelectStatement will parse a select statement and return a SelectStatement struct
-// that we use for further analysis.
-func parseSelectStatement(query string, postgresTables []PostgresTable) (*SelectStatement, error) {
+func parseSelectStatement(query string, tables []dbtypes.Table) (*SelectStatement, error) {
 	stmt, err := sqlparser.Parse(query)
 	if err != nil {
 		return nil, fmt.Errorf("parse select statement: %w", err)
@@ -78,14 +77,14 @@ func parseSelectStatement(query string, postgresTables []PostgresTable) (*Select
 		Join:    map[string][]string{},
 	}
 
-	tableAliasLookup, tables, err := extractTables(selectStmt)
+	tableAliasLookup, tableNames, err := extractTables(selectStmt)
 	if err != nil {
 		return nil, fmt.Errorf("extract tables: %w", err)
 	}
 
-	result.Tables = tables
+	result.Tables = tableNames
 
-	err = processSelectExpressions(selectStmt, tableAliasLookup, postgresTables, &result)
+	err = processSelectExpressions(selectStmt, tableAliasLookup, tables, &result)
 	if err != nil {
 		return nil, fmt.Errorf("process select expressions: %w", err)
 	}
@@ -95,62 +94,12 @@ func parseSelectStatement(query string, postgresTables []PostgresTable) (*Select
 	}
 
 	if selectStmt.Where != nil {
-		if err := processWhereClause(selectStmt.Where.Expr, tableAliasLookup, postgresTables, &result); err != nil {
+		if err := processWhereClause(selectStmt.Where.Expr, tableAliasLookup, tables, &result); err != nil {
 			return nil, fmt.Errorf("process where clause: %w", err)
 		}
 	}
 
 	return &result, nil
-}
-
-func scanSelectStatementForMissingIndexes(cleanedStatement string, selectStatement *SelectStatement, tables []PostgresTable, indexesByTable map[string][]Index) ([]issuetypes.QueryIssue, error) {
-	queryIssues := []issuetypes.QueryIssue{}
-
-	// check if the where clause contains a column that is not indexed
-	for table, columns := range selectStatement.Where {
-		if _, exists := indexesByTable[table]; !exists {
-			continue
-		}
-
-		for _, index := range indexesByTable[table] {
-			for _, column := range columns {
-				if !contains(index.Columns, column) {
-					columnNames := ""
-					columnNames += fmt.Sprintf(`From the %q" table: %s`, table, strings.Join(selectStatement.Columns[table], ", "))
-
-					queryIssues = append(queryIssues, issuetypes.QueryIssue{
-						IssueSeverity: issuetypes.IssueSeverityLow,
-						IssueType:     issuetypes.QueryIssueTypeWhereClauseMissingIndex,
-						Message:       "where clause contains a column that is not indexed",
-					})
-				}
-			}
-		}
-	}
-
-	// check if the join clause contains a column that is not indexed
-	for table, columns := range selectStatement.Join {
-		if _, exists := indexesByTable[table]; !exists {
-			continue
-		}
-
-		for _, index := range indexesByTable[table] {
-			for _, column := range columns {
-				if !contains(index.Columns, column) {
-					columnNames := ""
-					columnNames += fmt.Sprintf(`From the %q" table: %s`, table, strings.Join(selectStatement.Columns[table], ", "))
-
-					queryIssues = append(queryIssues, issuetypes.QueryIssue{
-						IssueSeverity: issuetypes.IssueSeverityLow,
-						IssueType:     issuetypes.QueryIssueTypeClauseMissingIndex,
-						Message:       "join clause contains a column that is not indexed",
-					})
-				}
-			}
-		}
-	}
-
-	return queryIssues, nil
 }
 
 func extractTables(selectStmt *sqlparser.Select) (map[string]string, []string, error) {
@@ -212,28 +161,85 @@ func contains(slice []string, str string) bool {
 	return false
 }
 
-func columnNamesForTable(table string, postgresTables []PostgresTable) []string {
-	for _, t := range postgresTables {
-		if t.TableName == table {
-			columnNames := []string{}
-			for _, col := range t.Columns {
-				columnNames = append(columnNames, col.ColumnName)
-			}
+func scanSelectStatementForMissingIndexes(selectStatement *SelectStatement, indexesByTable map[string][]Index) ([]issuetypes.QueryIssue, error) {
+	queryIssues := []issuetypes.QueryIssue{}
 
-			return columnNames
+	// check if the where clause contains a column that is not indexed
+	for table, columns := range selectStatement.Where {
+		if _, exists := indexesByTable[table]; !exists {
+			continue
+		}
+
+		for _, index := range indexesByTable[table] {
+			for _, column := range columns {
+				if !contains(index.Columns, column) {
+					columnNames := ""
+					columnNames += fmt.Sprintf(`From the %q" table: %s`, table, strings.Join(selectStatement.Columns[table], ", "))
+
+					queryIssues = append(queryIssues, issuetypes.QueryIssue{
+						IssueSeverity: issuetypes.IssueSeverityLow,
+						IssueType:     issuetypes.QueryIssueTypeWhereClauseMissingIndex,
+						Message:       "where clause contains a column that is not indexed",
+					})
+				}
+			}
 		}
 	}
 
-	return nil
+	// check if the join clause contains a column that is not indexed
+	for table, columns := range selectStatement.Join {
+		if _, exists := indexesByTable[table]; !exists {
+			continue
+		}
+
+		for _, index := range indexesByTable[table] {
+			for _, column := range columns {
+				if !contains(index.Columns, column) {
+					columnNames := ""
+					columnNames += fmt.Sprintf(`From the %q" table: %s`, table, strings.Join(selectStatement.Columns[table], ", "))
+
+					queryIssues = append(queryIssues, issuetypes.QueryIssue{
+						IssueSeverity: issuetypes.IssueSeverityLow,
+						IssueType:     issuetypes.QueryIssueTypeClauseMissingIndex,
+						Message:       "join clause contains a column that is not indexed",
+					})
+				}
+			}
+		}
+	}
+
+	return queryIssues, nil
 }
 
-func processSelectExpressions(selectStmt *sqlparser.Select, tableAliasLookup map[string]string, postgresTables []PostgresTable, result *SelectStatement) error {
+func indexesByTable(tables []dbtypes.Table) map[string][]Index {
+	indexesByTable := make(map[string][]Index)
+	for _, table := range tables {
+		// primary keys
+		indexesByTable[table.GetName()] = append(indexesByTable[table.GetName()], Index{
+			Columns:      table.GetPrimaryKeys(),
+			IsPrimaryKey: true,
+			IsUnique:     true, // of course
+		})
+
+		// other indexes
+		// for _, index := range table.Indexes {
+		// 	indexesByTable[table.TableName] = append(indexesByTable[table.TableName], Index{
+		// 		Columns:      index.Columns,
+		// 		IsPrimaryKey: false,
+		// 		IsUnique:     index.IsUnique,
+		// 	})
+	}
+
+	return indexesByTable
+}
+
+func processSelectExpressions(selectStmt *sqlparser.Select, tableAliasLookup map[string]string, tables []dbtypes.Table, result *SelectStatement) error {
 	for _, selectExpr := range selectStmt.SelectExprs {
 		switch expr := selectExpr.(type) {
 		case *sqlparser.StarExpr:
 			// Handle wildcard cases
 			if tableName, err := resolveTableName(expr.TableName, tableAliasLookup, len(result.Tables)); err == nil && tableName != "" {
-				result.Columns[tableName] = append(result.Columns[tableName], columnNamesForTable(tableName, postgresTables)...)
+				result.Columns[tableName] = append(result.Columns[tableName], columnNamesForTable(tableName, tables)...)
 			}
 
 		case *sqlparser.AliasedExpr:
@@ -241,7 +247,7 @@ func processSelectExpressions(selectStmt *sqlparser.Select, tableAliasLookup map
 			if col, ok := expr.Expr.(*sqlparser.ColName); ok {
 				qualifier := col.Qualifier.Name.String()
 				column := col.Name.String()
-				if tableName, err := resolveColumnTable(result.Tables, qualifier, column, tableAliasLookup, postgresTables); err == nil && tableName != "" {
+				if tableName, err := resolveColumnTable(result.Tables, qualifier, column, tableAliasLookup, tables); err == nil && tableName != "" {
 					result.Columns[tableName] = append(result.Columns[tableName], column)
 				}
 			} else if funcExpr, ok := expr.Expr.(*sqlparser.FuncExpr); ok {
@@ -258,12 +264,13 @@ func processSelectExpressions(selectStmt *sqlparser.Select, tableAliasLookup map
 	}
 
 	if selectStmt.Where != nil {
-		if err := processWhereClause(selectStmt.Where.Expr, tableAliasLookup, postgresTables, result); err != nil {
+		if err := processWhereClause(selectStmt.Where.Expr, tableAliasLookup, tables, result); err != nil {
 			return fmt.Errorf("process where clause: %w", err)
 		}
 	}
 	return nil
 }
+
 func resolveTableName(tableName sqlparser.TableName, tableAliasLookup map[string]string, numTables int) (string, error) {
 	if !tableName.IsEmpty() {
 		alias := tableName.Name.String()
@@ -280,7 +287,7 @@ func resolveTableName(tableName sqlparser.TableName, tableAliasLookup map[string
 	return "", fmt.Errorf("table name %q not found", tableName.Name.String())
 }
 
-func resolveColumnTable(tables []string, qualifier, column string, tableAliasLookup map[string]string, postgresTables []PostgresTable) (string, error) {
+func resolveColumnTable(tableNames []string, qualifier, column string, tableAliasLookup map[string]string, tables []dbtypes.Table) (string, error) {
 	fullQualifier := qualifier
 	if qualifier != "" {
 		if actualTable, exists := tableAliasLookup[fullQualifier]; exists {
@@ -289,9 +296,9 @@ func resolveColumnTable(tables []string, qualifier, column string, tableAliasLoo
 		return "", fmt.Errorf("table alias %q not found", fullQualifier)
 	} else {
 		// only search columns by table that also exist in tables array
-		for _, table := range tables {
-			if contains(columnNamesForTable(table, postgresTables), column) {
-				return table, nil
+		for _, tableName := range tableNames {
+			if contains(columnNamesForTable(tableName, tables), column) {
+				return tableName, nil
 			}
 		}
 	}
@@ -306,6 +313,71 @@ func sliceContains(slice []string, str string) bool {
 		}
 	}
 	return false
+}
+
+func columnNamesForTable(tableName string, tables []dbtypes.Table) []string {
+	for _, t := range tables {
+		if t.GetName() == tableName {
+			columnNames := []string{}
+			for _, col := range t.GetColumns() {
+				columnNames = append(columnNames, col.GetName())
+			}
+
+			return columnNames
+		}
+	}
+
+	return nil
+}
+
+func processWhereClause(whereExpr sqlparser.Expr, tableAliasLookup map[string]string, tables []dbtypes.Table, result *SelectStatement) error {
+	// This function will need to recursively process the WHERE clause expression tree
+	// and extract column names used in the expressions.
+	switch expr := whereExpr.(type) {
+	case *sqlparser.ColName:
+		qualifier := expr.Qualifier.Name.String()
+		column := expr.Name.String()
+		tableName, err := resolveColumnTable(result.Tables, qualifier, column, tableAliasLookup, tables)
+		if err != nil {
+			return fmt.Errorf("resolve column table: %w", err)
+		}
+		if tableName != "" {
+			// Check if column already exists for the table
+			if !sliceContains(result.Where[tableName], column) {
+				result.Where[tableName] = append(result.Where[tableName], column)
+			}
+		}
+	case *sqlparser.ComparisonExpr:
+		// Handle comparison expressions
+		if err := processWhereClause(expr.Left, tableAliasLookup, tables, result); err != nil {
+			return fmt.Errorf("process where clause (left): %w", err)
+		}
+		if err := processWhereClause(expr.Right, tableAliasLookup, tables, result); err != nil {
+			return fmt.Errorf("process where clause (right): %w", err)
+		}
+
+	case *sqlparser.AndExpr, *sqlparser.OrExpr:
+		// Handle AND, OR expressions (they have the same structure)
+		if binaryExpr, ok := expr.(*sqlparser.BinaryExpr); ok {
+			if err := processWhereClause(binaryExpr.Left, tableAliasLookup, tables, result); err != nil {
+				return fmt.Errorf("process where clause (and/or left): %w", err)
+			}
+			if err := processWhereClause(binaryExpr.Right, tableAliasLookup, tables, result); err != nil {
+				return fmt.Errorf("process where clause (and/or right): %w", err)
+			}
+		}
+
+	case *sqlparser.ParenExpr:
+		// Handle parenthesized expressions
+		if err := processWhereClause(expr.Expr, tableAliasLookup, tables, result); err != nil {
+			return fmt.Errorf("process where clause (paren): %w", err)
+		}
+
+	default:
+		// Handle other types of expressions (subqueries, functions, etc.)
+	}
+
+	return nil
 }
 
 func processJoinClauses(tableExprs sqlparser.TableExprs, tableAliasLookup map[string]string, result *SelectStatement) error {
@@ -367,54 +439,4 @@ func appendIfMissing(slice []string, element string) []string {
 		}
 	}
 	return append(slice, element) // Element not present, append it
-}
-
-func processWhereClause(whereExpr sqlparser.Expr, tableAliasLookup map[string]string, postgresTables []PostgresTable, result *SelectStatement) error {
-	// This function will need to recursively process the WHERE clause expression tree
-	// and extract column names used in the expressions.
-	switch expr := whereExpr.(type) {
-	case *sqlparser.ColName:
-		qualifier := expr.Qualifier.Name.String()
-		column := expr.Name.String()
-		tableName, err := resolveColumnTable(result.Tables, qualifier, column, tableAliasLookup, postgresTables)
-		if err != nil {
-			return fmt.Errorf("resolve column table: %w", err)
-		}
-		if tableName != "" {
-			// Check if column already exists for the table
-			if !sliceContains(result.Where[tableName], column) {
-				result.Where[tableName] = append(result.Where[tableName], column)
-			}
-		}
-	case *sqlparser.ComparisonExpr:
-		// Handle comparison expressions
-		if err := processWhereClause(expr.Left, tableAliasLookup, postgresTables, result); err != nil {
-			return fmt.Errorf("process where clause (left): %w", err)
-		}
-		if err := processWhereClause(expr.Right, tableAliasLookup, postgresTables, result); err != nil {
-			return fmt.Errorf("process where clause (right): %w", err)
-		}
-
-	case *sqlparser.AndExpr, *sqlparser.OrExpr:
-		// Handle AND, OR expressions (they have the same structure)
-		if binaryExpr, ok := expr.(*sqlparser.BinaryExpr); ok {
-			if err := processWhereClause(binaryExpr.Left, tableAliasLookup, postgresTables, result); err != nil {
-				return fmt.Errorf("process where clause (and/or left): %w", err)
-			}
-			if err := processWhereClause(binaryExpr.Right, tableAliasLookup, postgresTables, result); err != nil {
-				return fmt.Errorf("process where clause (and/or right): %w", err)
-			}
-		}
-
-	case *sqlparser.ParenExpr:
-		// Handle parenthesized expressions
-		if err := processWhereClause(expr.Expr, tableAliasLookup, postgresTables, result); err != nil {
-			return fmt.Errorf("process where clause (paren): %w", err)
-		}
-
-	default:
-		// Handle other types of expressions (subqueries, functions, etc.)
-	}
-
-	return nil
 }

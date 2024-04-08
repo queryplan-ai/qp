@@ -6,6 +6,7 @@ import (
 	"github.com/blastrain/vitess-sqlparser/sqlparser"
 	dbtypes "github.com/queryplan-ai/qp/pkg/db/types"
 	issuetypes "github.com/queryplan-ai/qp/pkg/issue/types"
+	"github.com/queryplan-ai/qp/pkg/plan"
 )
 
 func PlanQuery(db *dbtypes.DB, query string) (string, error) {
@@ -14,14 +15,9 @@ func PlanQuery(db *dbtypes.DB, query string) (string, error) {
 		return "", err
 	}
 
-	postgresTables := []PostgresTable{}
-	for _, table := range db.Tables {
-		postgresTables = append(postgresTables, table.(PostgresTable))
-	}
-
 	switch stmt.(type) {
 	case *sqlparser.Select:
-		issues, err := scanSelectStatementForIssues(query, postgresTables)
+		issues, err := plan.ScanSelectStatementForIssues(query, db.Tables)
 		if err != nil {
 			return "", fmt.Errorf("scan select statement for issues: %w", err)
 		}

@@ -136,6 +136,12 @@ WHERE c.TABLE_SCHEMA = ?`, db.DatabaseName)
 	return tables, nil
 }
 
+type Index struct {
+	Columns      []string
+	IsPrimaryKey bool
+	IsUnique     bool
+}
+
 func indexesByTable(mysqlTables []MysqlTable) map[string][]Index {
 	indexesByTable := make(map[string][]Index)
 	for _, mysqlTable := range mysqlTables {
