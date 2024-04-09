@@ -1,13 +1,14 @@
-package mysql
+package plan
 
 import (
 	"fmt"
 
 	"github.com/blastrain/vitess-sqlparser/sqlparser"
+	dbtypes "github.com/queryplan-ai/qp/pkg/db/types"
 	issuetypes "github.com/queryplan-ai/qp/pkg/issue/types"
 )
 
-func scanDeleteStatementForIssues(query string, mysqlTables []MysqlTable) ([]issuetypes.QueryIssue, error) {
+func ScanDeleteStatementForIssues(query string, tables []dbtypes.Table) ([]issuetypes.QueryIssue, error) {
 	_, err := parseDeleteStatement(query)
 	if err != nil {
 		return nil, fmt.Errorf("parse delete statement: %w", err)

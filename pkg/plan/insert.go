@@ -1,13 +1,14 @@
-package mysql
+package plan
 
 import (
 	"fmt"
 
 	"github.com/blastrain/vitess-sqlparser/sqlparser"
+	dbtypes "github.com/queryplan-ai/qp/pkg/db/types"
 	issuetypes "github.com/queryplan-ai/qp/pkg/issue/types"
 )
 
-func scanInsertStatementForIssues(query string, mysqlTables []MysqlTable) ([]issuetypes.QueryIssue, error) {
+func ScanInsertStatementForIssues(query string, tables []dbtypes.Table) ([]issuetypes.QueryIssue, error) {
 	_, err := parseInsertStatement(query)
 	if err != nil {
 		return nil, fmt.Errorf("parse insert statement: %w", err)

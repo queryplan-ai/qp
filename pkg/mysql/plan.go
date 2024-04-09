@@ -15,11 +15,6 @@ func PlanQuery(db *dbtypes.DB, query string) (string, error) {
 		return "", err
 	}
 
-	mysqlTables := []MysqlTable{}
-	for _, table := range db.Tables {
-		mysqlTables = append(mysqlTables, table.(MysqlTable))
-	}
-
 	switch stmt.(type) {
 	case *sqlparser.Select:
 		issues, err := plan.ScanSelectStatementForIssues(query, db.Tables)
@@ -33,7 +28,7 @@ func PlanQuery(db *dbtypes.DB, query string) (string, error) {
 
 		return "No issues found", nil
 	case *sqlparser.Update:
-		issues, err := scanUpdateStatementForIssues(query, mysqlTables)
+		issues, err := plan.ScanUpdateStatementForIssues(query, db.Tables)
 		if err != nil {
 			return "", fmt.Errorf("scan update statement for issues: %w", err)
 		}
@@ -44,7 +39,7 @@ func PlanQuery(db *dbtypes.DB, query string) (string, error) {
 
 		return "No issues found", nil
 	case *sqlparser.Insert:
-		issues, err := scanInsertStatementForIssues(query, mysqlTables)
+		issues, err := plan.ScanInsertStatementForIssues(query, db.Tables)
 		if err != nil {
 			return "", fmt.Errorf("scan insert statement for issues: %w", err)
 		}
@@ -55,7 +50,7 @@ func PlanQuery(db *dbtypes.DB, query string) (string, error) {
 
 		return "No issues found", nil
 	case *sqlparser.Delete:
-		issues, err := scanDeleteStatementForIssues(query, mysqlTables)
+		issues, err := plan.ScanDeleteStatementForIssues(query, db.Tables)
 		if err != nil {
 			return "", fmt.Errorf("scan delete statement for issues: %w", err)
 		}

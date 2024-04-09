@@ -27,6 +27,42 @@ func PlanQuery(db *dbtypes.DB, query string) (string, error) {
 		}
 
 		return "No issues found", nil
+
+	case *sqlparser.Update:
+		issues, err := plan.ScanUpdateStatementForIssues(query, db.Tables)
+		if err != nil {
+			return "", fmt.Errorf("scan update statement for issues: %w", err)
+		}
+
+		if len(issues) > 0 {
+			return formatIssues(issues), nil
+		}
+
+		return "No issues found", nil
+
+	case *sqlparser.Insert:
+		issues, err := plan.ScanInsertStatementForIssues(query, db.Tables)
+		if err != nil {
+			return "", fmt.Errorf("scan insert statement for issues: %w", err)
+		}
+
+		if len(issues) > 0 {
+			return formatIssues(issues), nil
+		}
+
+		return "No issues found", nil
+
+	case *sqlparser.Delete:
+		issues, err := plan.ScanDeleteStatementForIssues(query, db.Tables)
+		if err != nil {
+			return "", fmt.Errorf("scan delete statement for issues: %w", err)
+		}
+
+		if len(issues) > 0 {
+			return formatIssues(issues), nil
+		}
+
+		return "No issues found", nil
 	}
 
 	return "", nil
